@@ -1,0 +1,8 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /libraries/{libraryId}/recipes/{recipeId} {
+      allow read, create, update, delete: if libraryId.matches('^[A-Za-z0-9_-]{20,}$');
+    }
+  }
+}
