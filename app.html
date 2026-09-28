@@ -73,6 +73,8 @@ import {initializeApp} from "https://www.gstatic.com/firebasejs/12.19.0/firebase
 import {getFirestore,collection,addDoc,updateDoc,deleteDoc,doc,onSnapshot,serverTimestamp} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 const CK="recipeBoxFirebaseConfigV2", LK="recipeBoxLibraryIdV2", NK="recipeBoxNameV2";
+const DEFAULT_CONFIG={apiKey:"AIzaSyCZPbiy9Clzpq0bArI1F-H2V94XOV-zufA",authDomain:"recipe-box-c2c67.firebaseapp.com",projectId:"recipe-box-c2c67",storageBucket:"recipe-box-c2c67.firebasestorage.app",messagingSenderId:"870718023884",appId:"1:870718023884:web:f5c562a0cab80d9b343a69"};
+const DEFAULT_LIBRARY="aKEG6XYQ5tkJaGB1XVdMoASk";
 const FILTERS=["All","Inbox","Favourites","Tried","TikTok","Instagram","Breakfast","Lunch","Dinner","Baking","Dessert"];
 const RULES=[
 "rules_version = '2';",
@@ -85,7 +87,7 @@ const RULES=[
 "}"
 ].join("\n");
 const q=s=>document.querySelector(s), qa=s=>Array.from(document.querySelectorAll(s));
-let config=load(CK), library=localStorage.getItem(LK)||"", name=localStorage.getItem(NK)||"", db=null, unsub=null, recipes=[], filter="All", currentView="", connected=false;
+let config=load(CK)||DEFAULT_CONFIG, library=localStorage.getItem(LK)||DEFAULT_LIBRARY, name=localStorage.getItem(NK)||"", db=null, unsub=null, recipes=[], filter="All", currentView="", connected=false;
 q("#rules").value=RULES;q("#setupName").value=name;q("#nameInput").value=name;
 
 function load(k){try{return JSON.parse(localStorage.getItem(k)||"null")}catch(e){return null}}
