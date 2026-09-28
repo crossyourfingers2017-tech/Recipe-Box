@@ -70,7 +70,11 @@ import {getFirestore,collection,addDoc,updateDoc,deleteDoc,doc,onSnapshot,server
 
 const CK="recipeBoxFirebaseConfigV2", LK="recipeBoxLibraryIdV2", NK="recipeBoxNameV2";
 const FILTERS=["All","Inbox","Favourites","Tried","TikTok","Instagram","Breakfast","Lunch","Dinner","Baking","Dessert"];
-const RULES="rules_version = '2';\\nservice cloud.firestore {\\n  match /databases/{database}/documents {\\n    match /libraries/{libraryId}/recipes/{recipeId} {\\n      allow read, create, update, delete: if libraryId.matches('^[A-Za-z0-9_-]{20,}$');\\n    }\\n  }\\n}";
+const RULES=`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /libraries/{libraryId}/recipes/{recipeId} {
+      allow read, create, update, delete: if libraryId.matches('^[A-Za-z0-9_-]{20,}
 const q=s=>document.querySelector(s), qa=s=>Array.from(document.querySelectorAll(s));
 let config=load(CK), library=localStorage.getItem(LK)||"", name=localStorage.getItem(NK)||"", db=null, unsub=null, recipes=[], filter="All", currentView="", connected=false;
 q("#rules").value=RULES;q("#setupName").value=name;q("#nameInput").value=name;
@@ -85,13 +89,111 @@ function source(u){u=(u||"").toLowerCase();return u.includes("tiktok.com")?"TikT
 function clean(u){try{let x=new URL(u);x.hash="";["utm_source","utm_medium","utm_campaign","utm_term","utm_content"].forEach(k=>x.searchParams.delete(k));return x.toString()}catch(e){return (u||"").trim()}}
 function show(screen){qa(".screen").forEach(x=>x.classList.toggle("active",x.id===screen));qa(".nav [data-go]").forEach(x=>x.classList.toggle("active",x.dataset.go===screen));q("#title").textContent=screen==="more"?"More":screen==="favourites"?"Favourites":"Recipe Box";scrollTo(0,0)}
 function parseConfig(txt){
-  let obj={};
-  ["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"].forEach(k=>{
-    let re=new RegExp("[\\\"']?"+k+"[\\\"']?\\\\s*:\\\\s*[\\\"']([^\\\"']+)[\\\"']","i");
-    let m=String(txt||"").match(re);
-    if(m)obj[k]=m[1];
-  });
-  if(!obj.apiKey||!obj.projectId)throw Error("Could not find apiKey and projectId. Copy the Firebase Config block, including apiKey and projectId.");
+  txt=String(txt||"");
+  const get=(key)=>{
+    const patterns={
+      apiKey:/["']?apiKey["']?\s*:\s*["']([^"']+)["']/i,
+      authDomain:/["']?authDomain["']?\s*:\s*["']([^"']+)["']/i,
+      projectId:/["']?projectId["']?\s*:\s*["']([^"']+)["']/i,
+      storageBucket:/["']?storageBucket["']?\s*:\s*["']([^"']+)["']/i,
+      messagingSenderId:/["']?messagingSenderId["']?\s*:\s*["']([^"']+)["']/i,
+      appId:/["']?appId["']?\s*:\s*["']([^"']+)["']/i
+    };
+    const m=txt.match(patterns[key]);
+    return m?m[1]:"";
+  };
+  const obj={
+    apiKey:get("apiKey"),
+    authDomain:get("authDomain"),
+    projectId:get("projectId"),
+    storageBucket:get("storageBucket"),
+    messagingSenderId:get("messagingSenderId"),
+    appId:get("appId")
+  };
+  if(!obj.apiKey||!obj.projectId)throw Error("Could not find apiKey and projectId. Paste the Firebase Config block shown under SDK setup → Config.");
+  return obj;
+}
+function invite(){return location.origin+location.pathname+"#join="+enc(JSON.stringify({c:config,l:library}))}
+function shortcut(){return location.origin+location.pathname+"?save=SHARED_URL"}
+function applyInvite(){if(!location.hash.startsWith("#join="))return false;try{let d=JSON.parse(dec(location.hash.slice(6)));if(d.c&&d.l){config=d.c;library=d.l;save(CK,config);localStorage.setItem(LK,library);history.replaceState(null,"",location.pathname);return true}}catch(e){}return false}
+function quickParam(){let p=new URLSearchParams(location.search),u=p.get("save");if(!u)return "";try{return decodeURIComponent(u)}catch(e){return u}}
+async function connect(){if(!config||!library)return setup();try{db=getFirestore(initializeApp(config));connected=true;q("#sync").textContent="Live sync";q("#sync").className="sync ok";q("#shortcutUrl").value=shortcut();listen();show("recipes");let u=quickParam();if(u){history.replaceState(null,"",location.pathname);await quickSave(u)}}catch(e){q("#sync").textContent="Connection problem";setup();toast("Could not connect to Firebase")}}
+function setup(){show("setup");q("#sync").textContent="Setup needed";q("#sync").className="sync"}
+function listen(){if(unsub)unsub();let c=collection(db,"libraries",library,"recipes");unsub=onSnapshot(c,s=>{recipes=s.docs.map(d=>Object.assign({id:d.id},d.data()));recipes.sort((a,b)=>stamp(b)-stamp(a));render()},e=>{toast("Firestore access blocked — check Rules");q("#sync").textContent="Check rules";q("#sync").className="sync"})}
+function stamp(r){let x=r.updatedAt||r.createdAt;return x&&x.seconds?x.seconds:0}
+function render(){q("#count").textContent=recipes.length;q("#favCount").textContent=recipes.filter(r=>r.favourite).length;q("#triedCount").textContent=recipes.filter(r=>r.tried).length;drawChips();drawList()}
+function drawChips(){q("#chips").innerHTML="";FILTERS.forEach(f=>{let b=document.createElement("button");b.className="chip"+(f===filter?" active":"");b.textContent=f;b.onclick=()=>{filter=f;drawChips();drawList()};q("#chips").appendChild(b)})}
+function matches(r){let s=q("#search").value.trim().toLowerCase(), hay=[r.title,r.url,r.category,r.source,r.tags,r.ingredients,r.method,r.notes].join(" ").toLowerCase();if(s&&!hay.includes(s))return false;if(filter==="All")return true;if(filter==="Favourites")return !!r.favourite;if(filter==="Tried")return !!r.tried;return r.category===filter||r.source===filter}
+function drawList(){let a=recipes.filter(matches), w=q("#list");w.innerHTML="";q("#empty").classList.toggle("hidden",recipes.length>0);a.forEach(r=>w.appendChild(card(r)));let f=q("#favList");f.innerHTML="";recipes.filter(r=>r.favourite).forEach(r=>f.appendChild(card(r)));if(!recipes.filter(r=>r.favourite).length)f.innerHTML='<div class="card empty"><h2>No favourites yet</h2><p class="muted">Tap ♥ on any recipe.</p></div>'}
+function card(r){let d=document.createElement("div");d.className="recipe";let t=r.title||"Saved recipe";d.innerHTML='<h3>'+esc(t)+'</h3><div class="badges"><span class="badge">'+esc(r.category||"Inbox")+'</span><span class="badge">'+esc(r.source||"Other")+'</span>'+(r.favourite?'<span class="badge fav">♥ Favourite</span>':'')+(r.tried?'<span class="badge">✓ Tried</span>':'')+'</div>'+(r.tags?'<div class="meta">'+esc(r.tags)+'</div>':'')+'<div class="actions"><button data-view>Open</button><button data-fav>'+(r.favourite?'♥':'♡')+'</button>'+(r.url?'<button data-link>Source</button>':'')+'</div>';d.querySelector("[data-view]").onclick=()=>view(r.id);d.querySelector("[data-fav]").onclick=()=>patch(r.id,{favourite:!r.favourite});let l=d.querySelector("[data-link]");if(l)l.onclick=()=>window.open(r.url,"_blank");return d}
+function esc(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+function openEdit(r){q("#editModal").classList.remove("hidden");q("#rid").value=r?r.id:"";q("#editHeading").textContent=r?"Edit recipe":"Add recipe";q("#rtitle").value=r&&r.title||"";q("#rurl").value=r&&r.url||"";q("#rcategory").value=r&&r.category||"Inbox";q("#rsource").value=r&&r.source||"Other";q("#rtags").value=r&&r.tags||"";q("#ringredients").value=r&&r.ingredients||"";q("#rmethod").value=r&&r.method||"";q("#rnotes").value=r&&r.notes||"";q("#rfav").checked=!!(r&&r.favourite);q("#rtried").checked=!!(r&&r.tried);q("#deleteRecipe").classList.toggle("hidden",!r)}
+function closeEdit(){q("#editModal").classList.add("hidden")}
+function data(){let u=clean(q("#rurl").value);return{title:q("#rtitle").value.trim()||"Saved recipe",url:u,category:q("#rcategory").value,source:q("#rsource").value==="Other"&&u?source(u):q("#rsource").value,tags:q("#rtags").value.trim(),ingredients:q("#ringredients").value.trim(),method:q("#rmethod").value.trim(),notes:q("#rnotes").value.trim(),favourite:q("#rfav").checked,tried:q("#rtried").checked,updatedBy:name||"Household",updatedAt:serverTimestamp()}}
+async function saveRecipe(){if(!connected)return toast("Connect Firebase first");let x=data(),rid=q("#rid").value;if(x.url){let dupe=recipes.find(r=>clean(r.url)===x.url&&r.id!==rid);if(dupe&&!confirm("This link is already saved. Save another copy?"))return}if(rid)await updateDoc(doc(db,"libraries",library,"recipes",rid),x);else{ x.createdAt=serverTimestamp();x.addedBy=name||"Household";await addDoc(collection(db,"libraries",library,"recipes"),x)}closeEdit();toast("Recipe saved")}
+async function patch(rid,obj){obj.updatedAt=serverTimestamp();obj.updatedBy=name||"Household";await updateDoc(doc(db,"libraries",library,"recipes",rid),obj)}
+async function remove(){let rid=q("#rid").value;if(rid&&confirm("Delete this recipe from both phones?")){await deleteDoc(doc(db,"libraries",library,"recipes",rid));closeEdit();q("#viewModal").classList.add("hidden");toast("Recipe deleted")}}
+function view(rid){let r=recipes.find(x=>x.id===rid);if(!r)return;currentView=rid;q("#viewModal").classList.remove("hidden");q("#viewBody").innerHTML='<h2>'+esc(r.title||"Saved recipe")+'</h2><div class="badges"><span class="badge">'+esc(r.category||"Inbox")+'</span><span class="badge">'+esc(r.source||"Other")+'</span></div>'+(r.url?'<p><button id="openSource" class="primary">Open original post</button></p>':'')+(r.ingredients?'<div class="card"><h3>Ingredients</h3><div class="viewsec">'+esc(r.ingredients)+'</div></div>':'')+(r.method?'<div class="card"><h3>Method</h3><div class="viewsec">'+esc(r.method)+'</div></div>':'')+(r.notes?'<div class="card"><h3>Notes</h3><div class="viewsec">'+esc(r.notes)+'</div></div>':'')+(r.tags?'<p class="muted">Tags: '+esc(r.tags)+'</p>':'');let b=q("#openSource");if(b)b.onclick=()=>window.open(r.url,"_blank")}
+async function quickSave(u){u=clean(u);if(!u)return;if(recipes.some(r=>clean(r.url)===u)){toast("Already in Recipe Box");return}await addDoc(collection(db,"libraries",library,"recipes"),{title:"Saved from "+source(u),url:u,category:"Inbox",source:source(u),tags:"",ingredients:"",method:"",notes:"",favourite:false,tried:false,addedBy:name||"Household",updatedBy:name||"Household",createdAt:serverTimestamp(),updatedAt:serverTimestamp()});toast("Saved to shared Inbox")}
+function exportJson(){let b=new Blob([JSON.stringify(recipes,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="recipe-box-backup-"+new Date().toISOString().slice(0,10)+".json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+
+q("#connectBtn").onclick=()=>{try{name=q("#setupName").value.trim()||"Matt";localStorage.setItem(NK,name);config=parseConfig(q("#configInput").value);save(CK,config);if(!library)library=id();localStorage.setItem(LK,library);q("#nameInput").value=name;connect()}catch(e){toast(e.message)}};
+q("#copyRules").onclick=()=>navigator.clipboard.writeText(RULES).then(()=>toast("Rules copied"));
+qa(".addBtn").forEach(b=>b.onclick=()=>openEdit(null));q("#cancelEdit").onclick=closeEdit;q("#saveRecipe").onclick=saveRecipe;q("#deleteRecipe").onclick=remove;
+q("#closeView").onclick=()=>q("#viewModal").classList.add("hidden");q("#editFromView").onclick=()=>{let r=recipes.find(x=>x.id===currentView);q("#viewModal").classList.add("hidden");openEdit(r)};
+qa(".nav [data-go]").forEach(b=>b.onclick=()=>show(b.dataset.go));q("#search").oninput=drawList;q("#clearSearch").onclick=()=>{q("#search").value="";drawList()};
+q("#saveName").onclick=()=>{name=q("#nameInput").value.trim()||"Household";localStorage.setItem(NK,name);toast("Name saved")};
+q("#copyInvite").onclick=()=>navigator.clipboard.writeText(invite()).then(()=>toast("Invite copied"));
+q("#shareInvite").onclick=async()=>{let u=invite();if(navigator.share)await navigator.share({title:"Our Recipe Box",text:"Open this to join our shared Recipe Box",url:u});else{await navigator.clipboard.writeText(u);toast("Invite copied")}};
+q("#copyShortcut").onclick=()=>navigator.clipboard.writeText(shortcut()).then(()=>toast("Shortcut URL copied"));
+q("#exportBtn").onclick=exportJson;
+q("#forgetBtn").onclick=()=>{if(confirm("Forget this phone's Recipe Box connection?")){localStorage.removeItem(CK);localStorage.removeItem(LK);location.reload()}};
+q("#rurl").oninput=()=>{let s=source(q("#rurl").value);if(s!=="Other")q("#rsource").value=s};
+
+applyInvite();
+if(config&&library)connect();else setup();
+</script>
+</body>
+</html>);
+    }
+  }
+}`;
+const q=s=>document.querySelector(s), qa=s=>Array.from(document.querySelectorAll(s));
+let config=load(CK), library=localStorage.getItem(LK)||"", name=localStorage.getItem(NK)||"", db=null, unsub=null, recipes=[], filter="All", currentView="", connected=false;
+q("#rules").value=RULES;q("#setupName").value=name;q("#nameInput").value=name;
+
+function load(k){try{return JSON.parse(localStorage.getItem(k)||"null")}catch(e){return null}}
+function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
+function id(){const a=new Uint8Array(18);crypto.getRandomValues(a);return btoa(String.fromCharCode.apply(null,a)).replaceAll("+","-").replaceAll("/","_").replaceAll("=","")}
+function enc(s){return btoa(unescape(encodeURIComponent(s))).replaceAll("+","-").replaceAll("/","_").replaceAll("=","")}
+function dec(s){s=s.replaceAll("-","+").replaceAll("_","/");while(s.length%4)s+="=";return decodeURIComponent(escape(atob(s)))}
+function toast(t){q("#toast").textContent=t;q("#toast").classList.remove("hidden");setTimeout(()=>q("#toast").classList.add("hidden"),2200)}
+function source(u){u=(u||"").toLowerCase();return u.includes("tiktok.com")?"TikTok":u.includes("instagram.com")?"Instagram":u?"Website":"Other"}
+function clean(u){try{let x=new URL(u);x.hash="";["utm_source","utm_medium","utm_campaign","utm_term","utm_content"].forEach(k=>x.searchParams.delete(k));return x.toString()}catch(e){return (u||"").trim()}}
+function show(screen){qa(".screen").forEach(x=>x.classList.toggle("active",x.id===screen));qa(".nav [data-go]").forEach(x=>x.classList.toggle("active",x.dataset.go===screen));q("#title").textContent=screen==="more"?"More":screen==="favourites"?"Favourites":"Recipe Box";scrollTo(0,0)}
+function parseConfig(txt){
+  txt=String(txt||"");
+  const get=(key)=>{
+    const patterns={
+      apiKey:/["']?apiKey["']?\s*:\s*["']([^"']+)["']/i,
+      authDomain:/["']?authDomain["']?\s*:\s*["']([^"']+)["']/i,
+      projectId:/["']?projectId["']?\s*:\s*["']([^"']+)["']/i,
+      storageBucket:/["']?storageBucket["']?\s*:\s*["']([^"']+)["']/i,
+      messagingSenderId:/["']?messagingSenderId["']?\s*:\s*["']([^"']+)["']/i,
+      appId:/["']?appId["']?\s*:\s*["']([^"']+)["']/i
+    };
+    const m=txt.match(patterns[key]);
+    return m?m[1]:"";
+  };
+  const obj={
+    apiKey:get("apiKey"),
+    authDomain:get("authDomain"),
+    projectId:get("projectId"),
+    storageBucket:get("storageBucket"),
+    messagingSenderId:get("messagingSenderId"),
+    appId:get("appId")
+  };
+  if(!obj.apiKey||!obj.projectId)throw Error("Could not find apiKey and projectId. Paste the Firebase Config block shown under SDK setup → Config.");
   return obj;
 }
 function invite(){return location.origin+location.pathname+"#join="+enc(JSON.stringify({c:config,l:library}))}
