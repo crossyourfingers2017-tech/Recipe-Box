@@ -84,7 +84,16 @@ function toast(t){q("#toast").textContent=t;q("#toast").classList.remove("hidden
 function source(u){u=(u||"").toLowerCase();return u.includes("tiktok.com")?"TikTok":u.includes("instagram.com")?"Instagram":u?"Website":"Other"}
 function clean(u){try{let x=new URL(u);x.hash="";["utm_source","utm_medium","utm_campaign","utm_term","utm_content"].forEach(k=>x.searchParams.delete(k));return x.toString()}catch(e){return (u||"").trim()}}
 function show(screen){qa(".screen").forEach(x=>x.classList.toggle("active",x.id===screen));qa(".nav [data-go]").forEach(x=>x.classList.toggle("active",x.dataset.go===screen));q("#title").textContent=screen==="more"?"More":screen==="favourites"?"Favourites":"Recipe Box";scrollTo(0,0)}
-function parseConfig(txt){let obj={};["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"].forEach(k=>{let m=txt.match(new RegExp(k+"\\\\s*:\\\\s*[\\\"']([^\\\"']+)[\\\"']"));if(m)obj[k]=m[1]});if(!obj.apiKey||!obj.projectId)throw Error("Could not find apiKey and projectId");return obj}
+function parseConfig(txt){
+  let obj={};
+  ["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"].forEach(k=>{
+    let re=new RegExp("[\\\"']?"+k+"[\\\"']?\\\\s*:\\\\s*[\\\"']([^\\\"']+)[\\\"']","i");
+    let m=String(txt||"").match(re);
+    if(m)obj[k]=m[1];
+  });
+  if(!obj.apiKey||!obj.projectId)throw Error("Could not find apiKey and projectId. Copy the Firebase Config block, including apiKey and projectId.");
+  return obj;
+}
 function invite(){return location.origin+location.pathname+"#join="+enc(JSON.stringify({c:config,l:library}))}
 function shortcut(){return location.origin+location.pathname+"?save=SHARED_URL"}
 function applyInvite(){if(!location.hash.startsWith("#join="))return false;try{let d=JSON.parse(dec(location.hash.slice(6)));if(d.c&&d.l){config=d.c;library=d.l;save(CK,config);localStorage.setItem(LK,library);history.replaceState(null,"",location.pathname);return true}}catch(e){}return false}
