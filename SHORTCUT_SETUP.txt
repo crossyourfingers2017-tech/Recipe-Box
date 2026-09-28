@@ -1,0 +1,20 @@
+iPHONE SHARE SHORTCUT — SAVE RECIPE
+
+After Recipe Box is hosted and connected:
+
+1. Open Recipe Box > More.
+2. Copy the Shortcut URL shown there.
+3. Open Apple's Shortcuts app and tap +.
+4. Name it: Save Recipe
+5. Open shortcut details and turn on Show in Share Sheet.
+6. Set it to receive URLs.
+7. Add a URL action.
+8. Paste the Recipe Box shortcut URL.
+9. Replace SHARED_URL with the Shortcut Input variable.
+10. Add Open URLs.
+11. Save.
+
+Usage:
+TikTok or Instagram > Share > Save Recipe.
+Recipe Box opens and stores the post in the shared Inbox.
+Both phones will see it.
