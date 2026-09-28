@@ -90,8 +90,8 @@ const RULES=[
 "}"
 ].join("\n");
 const q=s=>document.querySelector(s), qa=s=>Array.from(document.querySelectorAll(s));
-let config=load(CK)||DEFAULT_CONFIG, library=localStorage.getItem(LK)||DEFAULT_LIBRARY, name=localStorage.getItem(NK)||"", db=null, unsub=null, recipes=[], filter="All", currentView="", connected=false;
-q("#rules").value=RULES;q("#setupName").value=name;q("#nameInput").value=name;
+let config=DEFAULT_CONFIG, library=DEFAULT_LIBRARY, name=localStorage.getItem(NK)||"", db=null, unsub=null, recipes=[], filter="All", currentView="", connected=false;
+save(CK,DEFAULT_CONFIG);localStorage.setItem(LK,DEFAULT_LIBRARY);q("#rules").value=RULES;q("#setupName").value=name;q("#nameInput").value=name;
 
 function load(k){try{return JSON.parse(localStorage.getItem(k)||"null")}catch(e){return null}}
 function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
@@ -129,7 +129,7 @@ function parseConfig(txt){
 }
 function invite(){return location.origin+location.pathname+"#join="+enc(JSON.stringify({c:config,l:library}))}
 function shortcut(){return location.origin+location.pathname+"?save=SHARED_URL"}
-function applyInvite(){if(!location.hash.startsWith("#join="))return false;try{let d=JSON.parse(dec(location.hash.slice(6)));if(d.c&&d.l){config=d.c;library=d.l;save(CK,config);localStorage.setItem(LK,library);history.replaceState(null,"",location.pathname);return true}}catch(e){}return false}
+function applyInvite(){if(!location.hash.startsWith("#join="))return false;history.replaceState(null,"",location.pathname);config=DEFAULT_CONFIG;library=DEFAULT_LIBRARY;save(CK,DEFAULT_CONFIG);localStorage.setItem(LK,DEFAULT_LIBRARY);return true}
 function quickParam(){let p=new URLSearchParams(location.search),u=p.get("save");if(!u)return "";try{return decodeURIComponent(u)}catch(e){return u}}
 async function connect(){if(!config||!library)return setup();try{db=getFirestore(initializeApp(config));connected=true;q("#sync").textContent="Live sync";q("#sync").className="sync ok";q("#shortcutUrl").value=shortcut();listen();show("recipes");let u=quickParam();if(u){history.replaceState(null,"",location.pathname);await quickSave(u)}}catch(e){q("#sync").textContent="Connection problem";setup();toast("Could not connect to Firebase")}}
 function setup(){show("setup");q("#sync").textContent="Setup needed";q("#sync").className="sync"}
@@ -165,7 +165,7 @@ q("#copyInvite").onclick=()=>navigator.clipboard.writeText(invite()).then(()=>to
 q("#shareInvite").onclick=async()=>{let u=invite();if(navigator.share)await navigator.share({title:"Our Recipe Box",text:"Open this to join our shared Recipe Box",url:u});else{await navigator.clipboard.writeText(u);toast("Invite copied")}};
 q("#copyShortcut").onclick=()=>navigator.clipboard.writeText(shortcut()).then(()=>toast("Shortcut URL copied"));
 q("#exportBtn").onclick=exportJson;
-q("#forgetBtn").onclick=()=>{if(confirm("Forget this phone's Recipe Box connection?")){localStorage.removeItem(CK);localStorage.removeItem(LK);location.reload()}};
+q("#forgetBtn").onclick=()=>{save(CK,DEFAULT_CONFIG);localStorage.setItem(LK,DEFAULT_LIBRARY);location.reload()};
 q("#rurl").oninput=()=>{let s=source(q("#rurl").value);if(s!=="Other")q("#rsource").value=s};
 
 applyInvite();
