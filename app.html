@@ -4,13 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#334a3d">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Recipe Box">
 <title>Recipe Box</title>
-<link rel="apple-touch-icon" sizes="180x180" href="recipe-box-icon.png?v=1">
-<link rel="icon" type="image/png" href="recipe-box-icon.png?v=1">
-<link rel="manifest" href="manifest.webmanifest?v=1">
+<link rel="apple-touch-icon" sizes="180x180" href="recipe-box-icon.png?v=2026.10.22.0246">
+<link rel="icon" type="image/png" href="recipe-box-icon.png?v=2026.10.22.0246">
+<link rel="manifest" href="manifest.webmanifest?v=2026.10.22.0246">
 
 <style>
 :root{--g:#334a3d;--bg:#f6f2e8;--card:#fff;--line:#ded8ca;--muted:#727970;--red:#a83c32;--gold:#b48a2c}
@@ -44,7 +47,7 @@
 <div class="card"><h3>Share this Recipe Box</h3><p class="muted">Send the invite to your wife. Opening it connects her phone to the same live recipe library.</p><button id="shareInvite" class="primary">Share with another phone</button><button id="copyInvite" class="secondary">Copy invite link</button></div>
 <div class="card"><h3>Fast TikTok & Instagram saving</h3><ol class="steps"><li>Create an iPhone Shortcut called <b>Save Recipe</b>.</li><li>Turn on <b>Show in Share Sheet</b> and accept URLs.</li><li>Add <b>URL Encode</b> and encode the Shortcut Input.</li><li>Add a <b>URL</b> action using the template below.</li><li>Replace <b>SHARED_URL</b> with the encoded result.</li><li>Add <b>Open URLs</b>.</li></ol><label>Shortcut URL<textarea id="shortcutUrl" rows="4" readonly></textarea></label><button id="copyShortcut" class="secondary">Copy shortcut URL</button></div>
 <div class="card"><h3>Your name</h3><label>Name shown on recipes<input id="nameInput"></label><button id="saveName" class="secondary">Save name</button></div>
-<div class="card"><h3>Improve saved recipes</h3><p class="muted">Re-check older imports for a cleaner title, ingredients and method. Manually edited titles are left alone where possible.</p><button id="improveAllBtn" class="secondary">Improve saved recipes</button><p id="improveStatus" class="tiny"></p></div><div class="card"><h3>Backup</h3><button id="exportBtn" class="secondary">Export JSON backup</button></div>
+<div class="card"><h3>Improve saved recipes</h3><p class="muted">Re-check older imports for a cleaner title, ingredients and method. Manually edited titles are left alone where possible.</p><button id="improveAllBtn" class="secondary">Improve saved recipes</button><p id="improveStatus" class="tiny"></p></div><div class="card"><h3>App update</h3><p class="muted">Current build: <b id="appBuild">2026.10.22.0246</b></p><button id="forceUpdateBtn" class="secondary">Check for updates</button></div><div class="card"><h3>Backup</h3><button id="exportBtn" class="secondary">Export JSON backup</button></div>
 <div class="card"><h3>Connection</h3><button id="forgetBtn" class="danger">Forget this phone's connection</button><p class="tiny">This does not delete recipes from the shared library.</p></div>
 </section>
 </main>
@@ -72,6 +75,7 @@
 import {initializeApp} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import {getFirestore,collection,addDoc,updateDoc,deleteDoc,doc,onSnapshot,serverTimestamp} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
+const APP_BUILD="2026.10.22.0246";
 const CK="recipeBoxFirebaseConfigV2", LK="recipeBoxLibraryIdV2", NK="recipeBoxNameV2";
 const DEFAULT_CONFIG={apiKey:"AIzaSyCZPbiy9Clzpq0bArI1F-H2V94XOV-zufA",authDomain:"recipe-box-c2c67.firebaseapp.com",projectId:"recipe-box-c2c67",storageBucket:"recipe-box-c2c67.firebasestorage.app",messagingSenderId:"870718023884",appId:"1:870718023884:web:f5c562a0cab80d9b343a69"};
 const DEFAULT_LIBRARY="aKEG6XYQ5tkJaGB1XVdMoASk";
@@ -482,7 +486,7 @@ q("#saveName").onclick=()=>{name=q("#nameInput").value.trim()||"Household";local
 q("#copyInvite").onclick=()=>navigator.clipboard.writeText(invite()).then(()=>toast("Invite copied"));
 q("#shareInvite").onclick=async()=>{let u=invite();if(navigator.share)await navigator.share({title:"Our Recipe Box",text:"Open this to join our shared Recipe Box",url:u});else{await navigator.clipboard.writeText(u);toast("Invite copied")}};
 q("#copyShortcut").onclick=()=>navigator.clipboard.writeText(shortcut()).then(()=>toast("Shortcut URL copied"));
-q("#improveAllBtn").onclick=improveAllRecipes;q("#exportBtn").onclick=exportJson;
+q("#improveAllBtn").onclick=improveAllRecipes;q("#forceUpdateBtn").onclick=()=>{let u=new URL(location.href);u.searchParams.set("v",Date.now());location.replace(u.toString())};q("#exportBtn").onclick=exportJson;
 q("#forgetBtn").onclick=()=>{save(CK,DEFAULT_CONFIG);localStorage.setItem(LK,DEFAULT_LIBRARY);location.reload()};
 q("#rurl").oninput=()=>{let s=source(q("#rurl").value);if(s!=="Other")q("#rsource").value=s};
 
