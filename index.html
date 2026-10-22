@@ -47,7 +47,7 @@
 <div class="card"><h3>Share this Recipe Box</h3><p class="muted">Send the invite to your wife. Opening it connects her phone to the same live recipe library.</p><button id="shareInvite" class="primary">Share with another phone</button><button id="copyInvite" class="secondary">Copy invite link</button></div>
 <div class="card"><h3>Fast TikTok & Instagram saving</h3><ol class="steps"><li>Create an iPhone Shortcut called <b>Save Recipe</b>.</li><li>Turn on <b>Show in Share Sheet</b> and accept URLs.</li><li>Add <b>URL Encode</b> and encode the Shortcut Input.</li><li>Add a <b>URL</b> action using the template below.</li><li>Replace <b>SHARED_URL</b> with the encoded result.</li><li>Add <b>Open URLs</b>.</li></ol><label>Shortcut URL<textarea id="shortcutUrl" rows="4" readonly></textarea></label><button id="copyShortcut" class="secondary">Copy shortcut URL</button></div>
 <div class="card"><h3>Your name</h3><label>Name shown on recipes<input id="nameInput"></label><button id="saveName" class="secondary">Save name</button></div>
-<div class="card"><h3>Backup</h3><button id="exportBtn" class="secondary">Export JSON backup</button></div>
+<div class="card"><h3>Improve saved recipes</h3><p class="muted">Re-check older imports for a cleaner title, ingredients and method. Manually edited titles are left alone where possible.</p><button id="improveAllBtn" class="secondary">Improve saved recipes</button><p id="improveStatus" class="tiny"></p></div><div class="card"><h3>Backup</h3><button id="exportBtn" class="secondary">Export JSON backup</button></div>
 <div class="card"><h3>Connection</h3><button id="forgetBtn" class="danger">Forget this phone's connection</button><p class="tiny">This does not delete recipes from the shared library.</p></div>
 </section>
 </main>
@@ -143,13 +143,15 @@ function card(r){let d=document.createElement("div");d.className="recipe";let t=
 function esc(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function openEdit(r){q("#editModal").classList.remove("hidden");q("#rid").value=r?r.id:"";q("#editHeading").textContent=r?"Edit recipe":"Add recipe";q("#rtitle").value=r&&r.title||"";q("#rurl").value=r&&r.url||"";q("#rcategory").value=r&&r.category||"Inbox";q("#rsource").value=r&&r.source||"Other";q("#rtags").value=r&&r.tags||"";q("#ringredients").value=r&&r.ingredients||"";q("#rmethod").value=r&&r.method||"";q("#rnotes").value=r&&r.notes||"";q("#rfav").checked=!!(r&&r.favourite);q("#rtried").checked=!!(r&&r.tried);q("#deleteRecipe").classList.toggle("hidden",!r)}
 function closeEdit(){q("#editModal").classList.add("hidden")}
-function data(){let u=clean(q("#rurl").value);return{title:q("#rtitle").value.trim()||"Saved recipe",url:u,category:q("#rcategory").value,source:q("#rsource").value==="Other"&&u?source(u):q("#rsource").value,tags:q("#rtags").value.trim(),ingredients:q("#ringredients").value.trim(),method:q("#rmethod").value.trim(),notes:q("#rnotes").value.trim(),favourite:q("#rfav").checked,tried:q("#rtried").checked,updatedBy:name||"Household",updatedAt:serverTimestamp()}}
+function data(){let u=clean(q("#rurl").value);return{title:q("#rtitle").value.trim()||"Saved recipe",autoTitle:false,url:u,category:q("#rcategory").value,source:q("#rsource").value==="Other"&&u?source(u):q("#rsource").value,tags:q("#rtags").value.trim(),ingredients:q("#ringredients").value.trim(),method:q("#rmethod").value.trim(),notes:q("#rnotes").value.trim(),favourite:q("#rfav").checked,tried:q("#rtried").checked,updatedBy:name||"Household",updatedAt:serverTimestamp()}}
 async function saveRecipe(){if(!connected)return toast("Connect Firebase first");let x=data(),rid=q("#rid").value;if(x.url){let dupe=recipes.find(r=>clean(r.url)===x.url&&r.id!==rid);if(dupe&&!confirm("This link is already saved. Save another copy?"))return}if(rid)await updateDoc(doc(db,"libraries",library,"recipes",rid),x);else{ x.createdAt=serverTimestamp();x.addedBy=name||"Household";await addDoc(collection(db,"libraries",library,"recipes"),x)}closeEdit();toast("Recipe saved")}
 async function patch(rid,obj){obj.updatedAt=serverTimestamp();obj.updatedBy=name||"Household";await updateDoc(doc(db,"libraries",library,"recipes",rid),obj)}
 async function remove(){let rid=q("#rid").value;if(rid&&confirm("Delete this recipe from both phones?")){await deleteDoc(doc(db,"libraries",library,"recipes",rid));closeEdit();q("#viewModal").classList.add("hidden");toast("Recipe deleted")}}
 function view(rid){let r=recipes.find(x=>x.id===rid);if(!r)return;currentView=rid;q("#viewModal").classList.remove("hidden");q("#viewBody").innerHTML=(r.image?'<img class="view-thumb" src="'+esc(r.image)+'" alt="" referrerpolicy="no-referrer">':'')+'<h2>'+esc(r.title||"Saved recipe")+'</h2><div class="badges"><span class="badge">'+esc(r.category||"Inbox")+'</span><span class="badge">'+esc(r.source||"Other")+'</span></div>'+(r.url?'<p class="top-actions"><button id="openSource" class="primary">Open original post</button><button id="refreshDetails" class="secondary">Refresh details</button></p>':'')+'<div class="card"><h3>Ingredients</h3><div class="viewsec">'+(r.ingredients?esc(r.ingredients):'<span class="muted">No ingredients added yet — tap Edit to add them.</span>')+'</div></div>'+'<div class="card"><h3>Method</h3><div class="viewsec">'+(r.method?esc(r.method):'<span class="muted">No method added yet — tap Edit to add it.</span>')+'</div></div>'+(r.caption?'<div class="card"><h3>Original caption</h3><div class="viewsec">'+esc(r.caption)+'</div></div>':'')+(r.notes?'<div class="card"><h3>Notes</h3><div class="viewsec">'+esc(r.notes)+'</div></div>':'')+(r.tags?'<p class="muted">Tags: '+esc(r.tags)+'</p>':'');let im=q("#viewBody img");if(im)im.onerror=()=>im.remove();let b=q("#openSource");if(b)b.onclick=()=>window.open(r.url,"_blank");let rf=q("#refreshDetails");if(rf)rf.onclick=()=>refreshDetails(r)}
 function tidySocialText(text){
   return String(text||"")
+    .replace(/\\n/g,"\n")
+    .replace(/\r/g,"")
     .replace(/https?:\/\/\S+/gi," ")
     .replace(/@[A-Za-z0-9._]+/g," ")
     .replace(/#[^\s#]+/g," ")
@@ -160,6 +162,19 @@ function tidySocialText(text){
     .replace(/\n[ \t]+/g,"\n")
     .trim()
 }
+function normalizeRecipeText(text){
+  let t=String(text||"").replace(/\\n/g,"\n").replace(/\r/g,"\n");
+  t=t.replace(/[•●▪▫◦‣]+/g,"\n").replace(/\s+[|]\s+/g,"\n");
+  t=t.replace(/\s*(?:✅|☑️?|✔️?|👉|➡️|➜|🔸|🔹)\s*/g,"\n");
+  const heads=[
+    "ingredients?","what you(?:'|’)ll need","what you will need","you(?:'|’)ll need","shopping list",
+    "method","instructions?","directions?","steps?","how to make(?: it)?","how i make(?: it)?",
+    "notes?","tips?","serves?","nutrition"
+  ].join("|");
+  t=t.replace(new RegExp("\\s*("+heads+")\\s*[:\\-–—]?\\s*","ig"),"\n$1\n");
+  t=t.replace(/\n{3,}/g,"\n\n").replace(/[ \t]{2,}/g," ").trim();
+  return t
+}
 function titleCaseRecipe(t){
   t=String(t||"").trim().replace(/[|•]+$/,"").replace(/^[\s:;,.\-–—]+|[\s:;,.\-–—]+$/g,"");
   if(!t)return "";
@@ -167,65 +182,95 @@ function titleCaseRecipe(t){
   return t.charAt(0).toUpperCase()+t.slice(1)
 }
 function recipeTitle(primary,caption,src){
-  let raw=tidySocialText(caption||primary), meta=tidySocialText(primary);
+  let raw=normalizeRecipeText(tidySocialText(caption||primary)), meta=tidySocialText(primary);
   if(!raw&&!meta)return "Saved from "+src;
-  let explicit=raw.match(/(?:^|\n)\s*(?:recipe|dish)\s*[:\-–—]\s*([^\n]{3,90})/i);
-  if(explicit)return titleCaseRecipe(explicit[1].split(/\b(?:ingredients?|what you(?:'|’)ll need|method|instructions?|directions?|steps?|how to make)\b/i)[0]);
-  let beforeHeading=raw.split(/\n\s*(?:ingredients?|what you(?:'|’)ll need|what you will need|you(?:'|’)ll need|shopping list|method|instructions?|directions?|steps?|how to make(?: it)?|how i make(?: it)?)\s*[:\-–—]?\s*\n?/i)[0].trim();
-  let lines=beforeHeading.split(/\n+/).map(x=>x.trim()).filter(Boolean).filter(x=>!/^\s*(?:save|follow|comment|share|tag)\b/i.test(x));
-  let candidate=lines[0]||meta||raw;
+  let lines=raw.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+  const bad=/^(?:save|follow|comment|share|tag|watch|recipe in (?:bio|comments)|full recipe|ad\b|sponsored\b)/i;
+  lines=lines.filter(x=>!bad.test(x)&&!/^(?:ingredients?|method|instructions?|directions?|steps?)$/i.test(x));
+  let explicit=raw.match(/(?:^|\n)\s*(?:recipe|dish)\s*[:\-–—]\s*([^\n]{3,80})/i);
+  let candidate=explicit?explicit[1]:(lines[0]||meta||raw);
+  let saved=candidate.match(/^(?:save|try|make)\s+(?:this\s+)?(.{3,60}?)\s+recipe\b/i);
+  if(saved)candidate=saved[1];
   candidate=candidate
+    .replace(/^.*?\bon\s+Instagram\s*:\s*/i,"")
     .replace(/^\s*(?:here(?:'|’)s|this is)\s+(?:my\s+)?/i,"")
     .replace(/^\s*(?:how to make|make)\s+/i,"")
-    .replace(/^\s*(?:easy|quick)\s+recipe\s*[:\-–—]?\s*/i,"")
-    .replace(/\s*(?:full recipe|recipe below|details below|save this).*$/i,"")
+    .replace(/^\s*(?:easy|quick|simple|best ever|my favourite|my favorite)\s+recipe\s*[:\-–—]?\s*/i,"")
+    .replace(/\s*(?:full recipe|recipe below|details below|save this|link in bio|follow for more).*$/i,"")
+    .replace(/\s+[|–—-]\s+.*(?:Instagram|TikTok).*$/i,"")
     .trim();
-  let recipePhrase=candidate.match(/^(.{3,70}?\brecipe\b)/i);
-  if(recipePhrase)candidate=recipePhrase[1].replace(/\brecipe\b/i,"").trim();
-  let sm=candidate.match(/^.*?[.!?](?:\s|$)/);let sentence=(sm?sm[0]:candidate).trim();
-  if(sentence.length>=3&&sentence.length<=72)candidate=sentence;
-  if(candidate.length>72){
-    let cut=candidate.slice(0,72);
-    let p=Math.max(cut.lastIndexOf(" — "),cut.lastIndexOf(" - "),cut.lastIndexOf(": "),cut.lastIndexOf(". "));
-    if(p>24)cut=cut.slice(0,p);
-    else cut=cut.replace(/\s+\S*$/,"");
-    candidate=cut.trim()
-  }
+  let rm=candidate.match(/^(.{3,58}?)\s+(?:recipe)\b/i);if(rm)candidate=rm[1];
+  let punct=candidate.search(/[.!?]/);if(punct>=3&&punct<58)candidate=candidate.slice(0,punct);
+  if(candidate.length>58)candidate=candidate.slice(0,58).replace(/\s+\S*$/,"");
   candidate=titleCaseRecipe(candidate);
-  if(!candidate||candidate.length<3||/^(?:instagram|tiktok|watch|video|saved from)/i.test(candidate))candidate=titleCaseRecipe(meta);
-  if(candidate.length>72)candidate=candidate.slice(0,69).replace(/\s+\S*$/,"")+"…";
+  if(!candidate||candidate.length<3||/^(?:instagram|tiktok|watch|video|saved from)/i.test(candidate)){
+    candidate=titleCaseRecipe(meta.replace(/^.*?:\s*/,""));
+  }
+  if(candidate.length>58)candidate=candidate.slice(0,55).replace(/\s+\S*$/,"")+"…";
   return candidate||"Saved from "+src
 }
 function cleanSection(s){
   return String(s||"")
     .replace(/^\s*[:\-–—]\s*/,"")
     .replace(/\n\s*#[^\n]+$/g,"")
+    .replace(/\n{3,}/g,"\n\n")
     .trim()
 }
+function prettyIngredients(s){
+  s=cleanSection(s);
+  if(!s.includes("\n")){
+    let parts=s.split(/\s*(?:;|·|•)\s*/).filter(Boolean);
+    if(parts.length>=3)s=parts.join("\n")
+  }
+  return s
+}
 function parseCaption(text){
-  let t=String(text||"").replace(/\r/g,"").trim(),ingredients="",method="";
+  let t=normalizeRecipeText(text),ingredients="",method="";
   if(!t)return{ingredients,method};
-  const ingHead="(?:ingredients?|what you(?:'|’)ll need|what you will need|you(?:'|’)ll need|shopping list)";
-  const methodHead="(?:method|instructions?|directions?|steps?|how to make(?: it)?|how i make(?: it)?)";
-  let im=t.match(new RegExp("(?:^|\\n)\\s*"+ingHead+"\\s*[:\\-–—]?\\s*\\n?([\\s\\S]*?)(?=(?:\\n\\s*"+methodHead+"\\s*[:\\-–—]?)|$)","i"));
-  let mm=t.match(new RegExp("(?:^|\\n)\\s*"+methodHead+"\\s*[:\\-–—]?\\s*\\n?([\\s\\S]*?)(?=(?:\\n\\s*(?:notes?|tips?|serves?|nutrition)\\s*[:\\-–—]?)|$)","i"));
-  if(im)ingredients=cleanSection(im[1]);
-  if(mm)method=cleanSection(mm[1]);
   let lines=t.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+  const isIng=x=>/^(?:ingredients?|what you(?:'|’)ll need|what you will need|you(?:'|’)ll need|shopping list)$/i.test(x);
+  const isMethod=x=>/^(?:method|instructions?|directions?|steps?|how to make(?: it)?|how i make(?: it)?)$/i.test(x);
+  const isStop=x=>/^(?:notes?|tips?|serves?|nutrition)$/i.test(x);
+  let ii=lines.findIndex(isIng), mi=lines.findIndex(isMethod);
+  if(ii>=0){
+    let stop=mi>ii?mi:lines.findIndex((x,n)=>n>ii&&isStop(x));
+    if(stop<0)stop=lines.length;
+    ingredients=lines.slice(ii+1,stop).join("\n")
+  }
+  if(mi>=0){
+    let stop=lines.findIndex((x,n)=>n>mi&&isStop(x));if(stop<0)stop=lines.length;
+    method=lines.slice(mi+1,stop).join("\n")
+  }
+  const qty=/^(?:[-–—]\s*)?(?:(?:\d+(?:[.,/]\d+)?|½|¼|¾|⅓|⅔)\s*)?(?:g|kg|mg|ml|l|tsp|tbsp|teaspoons?|tablespoons?|cups?|oz|lb|cloves?|cans?|packs?|slices?|eggs?|onions?|garlic|salt|pepper|oil|butter)\b/i;
   if(!ingredients){
-    const unit=/\b(?:\d+(?:[.,/]\d+)?|½|¼|¾)\s*(?:g|kg|mg|ml|l|tsp|tbsp|teaspoons?|tablespoons?|cups?|oz|lb|cloves?|cans?|packs?|slices?)\b|\b(?:pinch|handful|drizzle)\b/i;
-    let run=[],best=[];
+    let best=[],run=[];
     for(const line of lines){
-      if(unit.test(line)){run.push(line);if(run.length>best.length)best=[...run]}
-      else if(run.length){run=[]}
+      if(qty.test(line)||/^(?:a\s+)?(?:pinch|handful|drizzle)\b/i.test(line)){run.push(line);if(run.length>best.length)best=[...run]}
+      else if(run.length)run=[]
     }
     if(best.length>=3)ingredients=best.join("\n")
   }
   if(!method){
     let numbered=lines.filter(x=>/^\s*(?:step\s*)?\d+[.)\-:]\s+/i.test(x));
-    if(numbered.length>=2)method=numbered.join("\n")
+    if(numbered.length>=2)method=numbered.join("\n");
+    else{
+      const verb=/^(?:add|mix|stir|heat|cook|bake|fry|air fry|boil|simmer|whisk|combine|pour|place|season|chop|slice|dice|preheat|roast|grill|blend|serve|fold|knead|melt|brown|reduce|transfer)\b/i;
+      let steps=lines.filter(x=>verb.test(x));
+      if(steps.length>=2)method=steps.join("\n")
+    }
   }
-  return{ingredients:cleanSection(ingredients),method:cleanSection(method)}
+  return{ingredients:prettyIngredients(ingredients),method:cleanSection(method)}
+}
+async function readerText(u){
+  try{
+    let r=await fetch("https://r.jina.ai/"+u,{headers:{"Accept":"text/plain"}});
+    if(r.ok){let t=await r.text();return t.slice(0,18000)}
+  }catch(e){}
+  return ""
+}
+function externalRecipeUrl(text){
+  let urls=String(text||"").match(/https?:\/\/[^\s)"']+/g)||[];
+  return urls.find(x=>!/instagram\.com|tiktok\.com|facebook\.com|youtu(?:\.be|be\.com)|pinterest\./i.test(x))||""
 }
 async function fetchDetails(u){
   let src=source(u),out={title:"Saved from "+src,image:"",caption:"",ingredients:"",method:""},metaTitle="";
@@ -239,13 +284,71 @@ async function fetchDetails(u){
       if(d.image&&d.image.url&&!out.image)out.image=d.image.url
     }
   }catch(e){}
-  out.title=recipeTitle(metaTitle,out.caption,src);
   let p=parseCaption(out.caption);
+  if(!p.ingredients||!p.method){
+    let rt=await readerText(u),rp=parseCaption(rt);
+    if(!p.ingredients&&rp.ingredients)p.ingredients=rp.ingredients;
+    if(!p.method&&rp.method)p.method=rp.method
+  }
+  let web=externalRecipeUrl(out.caption);
+  if(web&&(!p.ingredients||!p.method)){
+    let wt=await readerText(web),wp=parseCaption(wt);
+    if(!p.ingredients&&wp.ingredients)p.ingredients=wp.ingredients;
+    if(!p.method&&wp.method)p.method=wp.method
+  }
+  out.title=recipeTitle(metaTitle,out.caption,src);
   out.ingredients=p.ingredients;out.method=p.method;
   return out
 }
-async function refreshDetails(r){if(!r||!r.url)return;toast("Refreshing recipe details…");let m=await fetchDetails(r.url),x={};if(m.title&&m.title!=="Saved from "+source(r.url))x.title=m.title;if(m.image)x.image=m.image;if(m.caption)x.caption=m.caption;if(m.ingredients&&!r.ingredients)x.ingredients=m.ingredients;if(m.method&&!r.method)x.method=m.method;await patch(r.id,x);toast("Recipe details refreshed");setTimeout(()=>{let n=recipes.find(z=>z.id===r.id);if(n)view(r.id)},450)}
-async function quickSave(u){u=clean(u);if(!u)return;if(recipes.some(r=>clean(r.url)===u)){toast("Already in Recipe Box");return}toast("Getting recipe details…");let m=await fetchDetails(u);await addDoc(collection(db,"libraries",library,"recipes"),{title:m.title||"Saved from "+source(u),image:m.image||"",caption:m.caption||"",url:u,category:"Inbox",source:source(u),tags:"",ingredients:m.ingredients||"",method:m.method||"",notes:"",favourite:false,tried:false,addedBy:name||"Household",updatedBy:name||"Household",createdAt:serverTimestamp(),updatedAt:serverTimestamp()});toast(m.image||m.caption?"Saved with recipe details":"Saved link — details unavailable")}
+function looksAutoTitle(r){
+  let t=String(r.title||"").trim(),c=tidySocialText(r.caption||"");
+  return r.autoTitle===true||!t||/^saved from\b/i.test(t)||t.length>58||/#|@|\bon Instagram\b|\bTikTok\b.*[:|]/i.test(t)||(c&&t.length>35&&c.toLowerCase().startsWith(t.toLowerCase().slice(0,25)))
+}
+async function refreshDetails(r){
+  if(!r||!r.url)return;
+  toast("Refreshing recipe details…");
+  let local=parseCaption(r.caption||""),m=await fetchDetails(r.url),x={};
+  let nt=recipeTitle(m.title||r.title,r.caption||m.caption,source(r.url));
+  if(looksAutoTitle(r)&&nt)x.title=nt,x.autoTitle=true;
+  if(m.image)x.image=m.image;
+  if(m.caption)x.caption=m.caption;
+  if(!r.ingredients&&(local.ingredients||m.ingredients))x.ingredients=local.ingredients||m.ingredients;
+  if(!r.method&&(local.method||m.method))x.method=local.method||m.method;
+  await patch(r.id,x);
+  toast("Recipe details refreshed");
+  setTimeout(()=>{let n=recipes.find(z=>z.id===r.id);if(n)view(r.id)},450)
+}
+async function quickSave(u){u=clean(u);if(!u)return;if(recipes.some(r=>clean(r.url)===u)){toast("Already in Recipe Box");return}toast("Getting recipe details…");let m=await fetchDetails(u);await addDoc(collection(db,"libraries",library,"recipes"),{title:m.title||"Saved from "+source(u),autoTitle:true,image:m.image||"",caption:m.caption||"",url:u,category:"Inbox",source:source(u),tags:"",ingredients:m.ingredients||"",method:m.method||"",notes:"",favourite:false,tried:false,addedBy:name||"Household",updatedBy:name||"Household",createdAt:serverTimestamp(),updatedAt:serverTimestamp()});toast(m.image||m.caption?"Saved with recipe details":"Saved link — details unavailable")}
+async function improveAllRecipes(){
+  if(!connected)return toast("Recipe Box is not connected");
+  let btn=q("#improveAllBtn"),st=q("#improveStatus"),items=[...recipes],changed=0;
+  btn.disabled=true;
+  try{
+    for(let i=0;i<items.length;i++){
+      let r=items[i];st.textContent="Checking "+(i+1)+" of "+items.length+"…";
+      let local=parseCaption(r.caption||""),x={};
+      if(looksAutoTitle(r)){
+        let nt=recipeTitle(r.title,r.caption||r.title,r.source||source(r.url));
+        if(nt&&nt!==r.title)x.title=nt,x.autoTitle=true
+      }
+      if(!r.ingredients&&local.ingredients)x.ingredients=local.ingredients;
+      if(!r.method&&local.method)x.method=local.method;
+      if((!r.ingredients&&!local.ingredients)||(!r.method&&!local.method)||looksAutoTitle(r)){
+        let m=await fetchDetails(r.url||"");
+        if(looksAutoTitle(r)&&m.title&&m.title!==r.title)x.title=m.title,x.autoTitle=true;
+        if(!r.ingredients&&!x.ingredients&&m.ingredients)x.ingredients=m.ingredients;
+        if(!r.method&&!x.method&&m.method)x.method=m.method;
+        if(!r.caption&&m.caption)x.caption=m.caption;
+        if(!r.image&&m.image)x.image=m.image
+      }
+      if(Object.keys(x).length){await patch(r.id,x);changed++}
+      await new Promise(res=>setTimeout(res,350))
+    }
+    st.textContent="Finished. Improved "+changed+" recipe"+(changed===1?"":"s")+".";
+    toast("Saved recipes checked")
+  }catch(e){st.textContent="Stopped early. You can run it again.";toast("Could not finish every recipe")}
+  btn.disabled=false
+}
 function exportJson(){let b=new Blob([JSON.stringify(recipes,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="recipe-box-backup-"+new Date().toISOString().slice(0,10)+".json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
 q("#connectBtn").onclick=()=>{try{name=q("#setupName").value.trim()||"Matt";localStorage.setItem(NK,name);config=parseConfig(q("#configInput").value);save(CK,config);if(!library)library=id();localStorage.setItem(LK,library);q("#nameInput").value=name;connect()}catch(e){toast(e.message)}};
@@ -257,7 +360,7 @@ q("#saveName").onclick=()=>{name=q("#nameInput").value.trim()||"Household";local
 q("#copyInvite").onclick=()=>navigator.clipboard.writeText(invite()).then(()=>toast("Invite copied"));
 q("#shareInvite").onclick=async()=>{let u=invite();if(navigator.share)await navigator.share({title:"Our Recipe Box",text:"Open this to join our shared Recipe Box",url:u});else{await navigator.clipboard.writeText(u);toast("Invite copied")}};
 q("#copyShortcut").onclick=()=>navigator.clipboard.writeText(shortcut()).then(()=>toast("Shortcut URL copied"));
-q("#exportBtn").onclick=exportJson;
+q("#improveAllBtn").onclick=improveAllRecipes;q("#exportBtn").onclick=exportJson;
 q("#forgetBtn").onclick=()=>{save(CK,DEFAULT_CONFIG);localStorage.setItem(LK,DEFAULT_LIBRARY);location.reload()};
 q("#rurl").oninput=()=>{let s=source(q("#rurl").value);if(s!=="Other")q("#rsource").value=s};
 
