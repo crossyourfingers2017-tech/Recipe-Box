@@ -1,7 +1,7 @@
 {
   "name": "Recipe Box",
   "short_name": "Recipe Box",
-  "start_url": "./",
+  "start_url": "./?v=2026.10.22.0246",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f6f2e8",
@@ -9,7 +9,7 @@
   "icons": [
     {
       "src": "recipe-box-icon.png",
-      "sizes": "180x180",
+      "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "any"
     }
