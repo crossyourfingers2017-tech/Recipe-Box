@@ -144,7 +144,7 @@ function data(){let u=clean(q("#rurl").value);return{title:q("#rtitle").value.tr
 async function saveRecipe(){if(!connected)return toast("Connect Firebase first");let x=data(),rid=q("#rid").value;if(x.url){let dupe=recipes.find(r=>clean(r.url)===x.url&&r.id!==rid);if(dupe&&!confirm("This link is already saved. Save another copy?"))return}if(rid)await updateDoc(doc(db,"libraries",library,"recipes",rid),x);else{ x.createdAt=serverTimestamp();x.addedBy=name||"Household";await addDoc(collection(db,"libraries",library,"recipes"),x)}closeEdit();toast("Recipe saved")}
 async function patch(rid,obj){obj.updatedAt=serverTimestamp();obj.updatedBy=name||"Household";await updateDoc(doc(db,"libraries",library,"recipes",rid),obj)}
 async function remove(){let rid=q("#rid").value;if(rid&&confirm("Delete this recipe from both phones?")){await deleteDoc(doc(db,"libraries",library,"recipes",rid));closeEdit();q("#viewModal").classList.add("hidden");toast("Recipe deleted")}}
-function view(rid){let r=recipes.find(x=>x.id===rid);if(!r)return;currentView=rid;q("#viewModal").classList.remove("hidden");q("#viewBody").innerHTML=(r.image?'<img class="view-thumb" src="'+esc(r.image)+'" alt="" referrerpolicy="no-referrer">':'')+'<h2>'+esc(r.title||"Saved recipe")+'</h2><div class="badges"><span class="badge">'+esc(r.category||"Inbox")+'</span><span class="badge">'+esc(r.source||"Other")+'</span></div>'+(r.url?'<p class="top-actions"><button id="openSource" class="primary">Open original post</button><button id="refreshDetails" class="secondary">Refresh details</button><button id="pasteCaption" class="secondary">Use copied caption</button></p>':'')+'<div class="card"><h3>Ingredients</h3><div class="viewsec">'+(r.ingredients?esc(r.ingredients):'<span class="muted">No ingredients added yet — tap Edit to add them.</span>')+'</div></div>'+'<div class="card"><h3>Method</h3><div class="viewsec">'+(r.method?esc(r.method):'<span class="muted">No method added yet — tap Edit to add it.</span>')+'</div></div>'+(r.caption?'<div class="card"><h3>Original caption</h3><div class="viewsec">'+esc(r.caption)+'</div></div>':'')+(r.notes?'<div class="card"><h3>Notes</h3><div class="viewsec">'+esc(r.notes)+'</div></div>':'')+(r.tags?'<p class="muted">Tags: '+esc(r.tags)+'</p>':'');let im=q("#viewBody img");if(im)im.onerror=()=>im.remove();let b=q("#openSource");if(b)b.onclick=()=>window.open(r.url,"_blank");let rf=q("#refreshDetails");if(rf)rf.onclick=()=>refreshDetails(r);let pc=q("#pasteCaption");if(pc)pc.onclick=()=>pasteCaptionForRecipe(r)}
+function view(rid){let r=recipes.find(x=>x.id===rid);if(!r)return;currentView=rid;q("#viewModal").classList.remove("hidden");q("#viewBody").innerHTML=(r.image?'<img class="view-thumb" src="'+esc(r.image)+'" alt="" referrerpolicy="no-referrer">':'')+'<h2>'+esc(r.title||"Saved recipe")+'</h2><div class="badges"><span class="badge">'+esc(r.category||"Inbox")+'</span><span class="badge">'+esc(r.source||"Other")+'</span></div>'+(r.url?'<p class="top-actions"><button id="openSource" class="primary">Open original post</button><button id="refreshDetails" class="secondary">Refresh details</button><button id="rebuildCaption" class="secondary">Rebuild from caption</button><button id="pasteCaption" class="secondary">Use copied caption</button></p>':'')+'<div class="card"><h3>Ingredients</h3><div class="viewsec">'+(r.ingredients?esc(r.ingredients):'<span class="muted">No ingredients added yet — tap Edit to add them.</span>')+'</div></div>'+'<div class="card"><h3>Method</h3><div class="viewsec">'+(r.method?esc(r.method):'<span class="muted">No method added yet — tap Edit to add it.</span>')+'</div></div>'+(r.caption?'<div class="card"><h3>Original caption</h3><div class="viewsec">'+esc(r.caption)+'</div></div>':'')+(r.notes?'<div class="card"><h3>Notes</h3><div class="viewsec">'+esc(r.notes)+'</div></div>':'')+(r.tags?'<p class="muted">Tags: '+esc(r.tags)+'</p>':'');let im=q("#viewBody img");if(im)im.onerror=()=>im.remove();let b=q("#openSource");if(b)b.onclick=()=>window.open(r.url,"_blank");let rf=q("#refreshDetails");if(rf)rf.onclick=()=>refreshDetails(r);let rc=q("#rebuildCaption");if(rc)rc.onclick=()=>rebuildFromStoredCaption(r);let pc=q("#pasteCaption");if(pc)pc.onclick=()=>pasteCaptionForRecipe(r)}
 function stripSocialWrapper(text){
   let s=String(text||"").trim();
   s=s.replace(/^\s*[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?\s*-\s*[^\n]+?\bon\s+[A-Za-z]+\s+\d{1,2},\s+\d{4}\s*:\s*[“"'‘’]?/i,"");
@@ -358,6 +358,20 @@ function looksAutoTitle(r){
   let t=String(r.title||"").trim(),c=tidySocialText(r.caption||"");
   return r.autoTitle===true||!t||/^saved from\b/i.test(t)||(/^[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?/i.test(t)||/^something i needed|^if you want recipes/i.test(t))||t.length>58||/#|@|\bon Instagram\b|\bTikTok\b.*[:|]/i.test(t)||(c&&t.length>35&&c.toLowerCase().startsWith(t.toLowerCase().slice(0,25)))
 }
+async function rebuildFromStoredCaption(r){
+  let text=String(r.caption||"").trim();
+  if(text.length<20)return toast("Original caption is empty");
+  let p=parseCaption(text),nt=recipeTitle("",text,r.source||source(r.url)),x={
+    updatedBy:name||"Household",
+    updatedAt:serverTimestamp()
+  };
+  if(nt){x.title=nt;x.autoTitle=true}
+  if(p.ingredients)x.ingredients=p.ingredients;
+  if(p.method)x.method=p.method;
+  await patch(r.id,x);
+  toast("Rebuilt from original caption");
+  setTimeout(()=>{let n=recipes.find(z=>z.id===r.id);if(n)view(r.id)},450)
+}
 async function applyCaptionToRecipe(r,text){
   text=String(text||"").trim();
   if(text.length<20)return toast("No full caption found");
@@ -387,23 +401,44 @@ async function pasteCaptionForRecipe(r){
 async function refreshDetails(r){
   if(!r||!r.url)return;
   toast("Refreshing recipe details…");
-  let m=await fetchDetails(r.url),x={};
-  let oldCaption=String(r.caption||""),newCaption=String(m.caption||"");
-  let bestCaption=newCaption.length>oldCaption.length?newCaption:(oldCaption||newCaption);
-  let local=parseCaption(bestCaption);
-  let nt=recipeTitle(m.title||r.title,bestCaption,source(r.url));
-  if(looksAutoTitle(r)||/^[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?/i.test(String(r.title||"")))x.title=nt,x.autoTitle=true;
-  if(m.image)x.image=m.image;
-  if(bestCaption&&bestCaption!==oldCaption)x.caption=bestCaption;
-  if(!r.ingredients&&(local.ingredients||m.ingredients))x.ingredients=local.ingredients||m.ingredients;
-  if(!r.method&&(local.method||m.method))x.method=local.method||m.method;
+  let stored=String(r.caption||"").trim(),local=parseCaption(stored),x={};
+  let nt=stored?recipeTitle("",stored,r.source||source(r.url)):"";
+  if(nt&&looksAutoTitle(r)){x.title=nt;x.autoTitle=true}
+  if(!r.ingredients&&local.ingredients)x.ingredients=local.ingredients;
+  if(!r.method&&local.method)x.method=local.method;
+
+  let stillNeedsTitle=!nt||/^saved from\b/i.test(nt)||looksAutoTitle({title:nt,caption:stored,autoTitle:false});
+  let stillNeedsIngredients=!r.ingredients&&!x.ingredients;
+  let stillNeedsMethod=!r.method&&!x.method;
+
+  if(stillNeedsTitle||stillNeedsIngredients||stillNeedsMethod){
+    let m=await fetchDetails(r.url),remote=String(m.caption||"").trim();
+    let bestCaption=stored;
+    if(remote.length>bestCaption.length)bestCaption=remote;
+    let p=parseCaption(bestCaption);
+    let rt=recipeTitle(m.title||"",bestCaption,r.source||source(r.url));
+    if((looksAutoTitle(r)||stillNeedsTitle)&&rt){x.title=rt;x.autoTitle=true}
+    if(!r.ingredients&&!x.ingredients&&(p.ingredients||m.ingredients))x.ingredients=p.ingredients||m.ingredients;
+    if(!r.method&&!x.method&&(p.method||m.method))x.method=p.method||m.method;
+    if(bestCaption&&bestCaption!==stored)x.caption=bestCaption;
+    if(m.image)x.image=m.image
+  }
+
   await patch(r.id,x);
-  let improvedTitle=x.title&&x.title!==r.title;
-  if(!improvedTitle&&(!x.ingredients||r.ingredients)&&(!x.method||r.method)&&/Instagram|TikTok/i.test(r.source||source(r.url)))toast("Only a preview was available — use copied caption for the full recipe");
-  else toast("Recipe details refreshed");
+  toast("Recipe details refreshed");
   setTimeout(()=>{let n=recipes.find(z=>z.id===r.id);if(n)view(r.id)},450)
 }
 async function quickSave(u){u=clean(u);if(!u)return;if(recipes.some(r=>clean(r.url)===u)){toast("Already in Recipe Box");return}toast("Getting recipe details…");let m=await fetchDetails(u);await addDoc(collection(db,"libraries",library,"recipes"),{title:m.title||"Saved from "+source(u),autoTitle:true,image:m.image||"",caption:m.caption||"",url:u,category:"Inbox",source:source(u),tags:"",ingredients:m.ingredients||"",method:m.method||"",notes:"",favourite:false,tried:false,addedBy:name||"Household",updatedBy:name||"Household",createdAt:serverTimestamp(),updatedAt:serverTimestamp()});toast(m.image||m.caption?"Saved with recipe details":"Saved link — details unavailable")}
+function detailsFromStoredCaption(r){
+  let cap=String(r.caption||"").trim(),p=parseCaption(cap),out={};
+  if(cap){
+    let nt=recipeTitle("",cap,r.source||source(r.url));
+    if(nt&&looksAutoTitle(r)){out.title=nt;out.autoTitle=true}
+    if(!r.ingredients&&p.ingredients)out.ingredients=p.ingredients;
+    if(!r.method&&p.method)out.method=p.method
+  }
+  return out
+}
 async function improveAllRecipes(){
   if(!connected)return toast("Recipe Box is not connected");
   let btn=q("#improveAllBtn"),st=q("#improveStatus"),items=[...recipes],changed=0;
@@ -411,7 +446,7 @@ async function improveAllRecipes(){
   try{
     for(let i=0;i<items.length;i++){
       let r=items[i];st.textContent="Checking "+(i+1)+" of "+items.length+"…";
-      let local=parseCaption(r.caption||""),x={};
+      let local=parseCaption(r.caption||""),x=detailsFromStoredCaption(r);
       if(looksAutoTitle(r)){
         let nt=recipeTitle(r.title,r.caption||r.title,r.source||source(r.url));
         if(nt&&nt!==r.title)x.title=nt,x.autoTitle=true
