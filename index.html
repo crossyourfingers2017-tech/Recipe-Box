@@ -364,11 +364,14 @@ function looksAutoTitle(r){
 async function refreshDetails(r){
   if(!r||!r.url)return;
   toast("Refreshing recipe details…");
-  let local=parseCaption(r.caption||""),m=await fetchDetails(r.url),x={};
-  let nt=recipeTitle(m.title||r.title,r.caption||m.caption,source(r.url));
+  let m=await fetchDetails(r.url),x={};
+  let oldCaption=String(r.caption||""),newCaption=String(m.caption||"");
+  let bestCaption=newCaption.length>oldCaption.length?newCaption:(oldCaption||newCaption);
+  let local=parseCaption(bestCaption);
+  let nt=recipeTitle(m.title||r.title,bestCaption,source(r.url));
   if(looksAutoTitle(r)||/^[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?/i.test(String(r.title||"")))x.title=nt,x.autoTitle=true;
   if(m.image)x.image=m.image;
-  if(m.caption)x.caption=m.caption;
+  if(bestCaption&&bestCaption!==oldCaption)x.caption=bestCaption;
   if(!r.ingredients&&(local.ingredients||m.ingredients))x.ingredients=local.ingredients||m.ingredients;
   if(!r.method&&(local.method||m.method))x.method=local.method||m.method;
   await patch(r.id,x);
@@ -392,10 +395,12 @@ async function improveAllRecipes(){
       if(!r.method&&local.method)x.method=local.method;
       if((!r.ingredients&&!local.ingredients)||(!r.method&&!local.method)||looksAutoTitle(r)){
         let m=await fetchDetails(r.url||"");
-        if(looksAutoTitle(r)&&m.title&&m.title!==r.title)x.title=m.title,x.autoTitle=true;
-        if(!r.ingredients&&!x.ingredients&&m.ingredients)x.ingredients=m.ingredients;
-        if(!r.method&&!x.method&&m.method)x.method=m.method;
-        if(!r.caption&&m.caption)x.caption=m.caption;
+        let bc=String(m.caption||"").length>String(r.caption||"").length?String(m.caption||""):String(r.caption||m.caption||"");
+        if(looksAutoTitle(r)){let nt=recipeTitle(m.title||r.title,bc,r.source||source(r.url));if(nt&&nt!==r.title)x.title=nt,x.autoTitle=true}
+        let pp=parseCaption(bc);
+        if(!r.ingredients&&!x.ingredients&&(pp.ingredients||m.ingredients))x.ingredients=pp.ingredients||m.ingredients;
+        if(!r.method&&!x.method&&(pp.method||m.method))x.method=pp.method||m.method;
+        if(bc&&bc!==String(r.caption||""))x.caption=bc;
         if(!r.image&&m.image)x.image=m.image
       }
       if(Object.keys(x).length){await patch(r.id,x);changed++}
