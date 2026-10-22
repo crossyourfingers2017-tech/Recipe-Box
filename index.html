@@ -148,14 +148,20 @@ async function saveRecipe(){if(!connected)return toast("Connect Firebase first")
 async function patch(rid,obj){obj.updatedAt=serverTimestamp();obj.updatedBy=name||"Household";await updateDoc(doc(db,"libraries",library,"recipes",rid),obj)}
 async function remove(){let rid=q("#rid").value;if(rid&&confirm("Delete this recipe from both phones?")){await deleteDoc(doc(db,"libraries",library,"recipes",rid));closeEdit();q("#viewModal").classList.add("hidden");toast("Recipe deleted")}}
 function view(rid){let r=recipes.find(x=>x.id===rid);if(!r)return;currentView=rid;q("#viewModal").classList.remove("hidden");q("#viewBody").innerHTML=(r.image?'<img class="view-thumb" src="'+esc(r.image)+'" alt="" referrerpolicy="no-referrer">':'')+'<h2>'+esc(r.title||"Saved recipe")+'</h2><div class="badges"><span class="badge">'+esc(r.category||"Inbox")+'</span><span class="badge">'+esc(r.source||"Other")+'</span></div>'+(r.url?'<p class="top-actions"><button id="openSource" class="primary">Open original post</button><button id="refreshDetails" class="secondary">Refresh details</button></p>':'')+'<div class="card"><h3>Ingredients</h3><div class="viewsec">'+(r.ingredients?esc(r.ingredients):'<span class="muted">No ingredients added yet — tap Edit to add them.</span>')+'</div></div>'+'<div class="card"><h3>Method</h3><div class="viewsec">'+(r.method?esc(r.method):'<span class="muted">No method added yet — tap Edit to add it.</span>')+'</div></div>'+(r.caption?'<div class="card"><h3>Original caption</h3><div class="viewsec">'+esc(r.caption)+'</div></div>':'')+(r.notes?'<div class="card"><h3>Notes</h3><div class="viewsec">'+esc(r.notes)+'</div></div>':'')+(r.tags?'<p class="muted">Tags: '+esc(r.tags)+'</p>':'');let im=q("#viewBody img");if(im)im.onerror=()=>im.remove();let b=q("#openSource");if(b)b.onclick=()=>window.open(r.url,"_blank");let rf=q("#refreshDetails");if(rf)rf.onclick=()=>refreshDetails(r)}
+function stripSocialWrapper(text){
+  let s=String(text||"").trim();
+  s=s.replace(/^\s*[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?\s*-\s*[^\n]+?\bon\s+[A-Za-z]+\s+\d{1,2},\s+\d{4}\s*:\s*[“"'‘’]?/i,"");
+  s=s.replace(/^\s*[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?\s*-\s*[^:]+:\s*[“"'‘’]?/i,"");
+  s=s.replace(/^\s*[^\n]+?\bon\s+[A-Za-z]+\s+\d{1,2},\s+\d{4}\s*:\s*[“"'‘’]?/i,"");
+  return s
+}
 function tidySocialText(text){
-  return String(text||"")
+  return stripSocialWrapper(text)
     .replace(/\\n/g,"\n")
     .replace(/\r/g,"")
     .replace(/https?:\/\/\S+/gi," ")
     .replace(/@[A-Za-z0-9._]+/g," ")
     .replace(/#[^\s#]+/g," ")
-    .replace(/^\s*[\d,.]+\s+likes?,\s*[\d,.]+\s+comments?\s*-\s*[^\n:]+\s+on\s+[^:]+:\s*["“]?/i,"")
     .replace(/^.*?\bon\s+Instagram\s*:\s*["“]?/i,"")
     .replace(/^TikTok\s*[-|:·]\s*/i,"")
     .replace(/[“”"]/g,"")
@@ -190,6 +196,8 @@ function recipeTitle(primary,caption,src){
   lines=lines.filter(x=>!bad.test(x)&&!/^(?:ingredients?|method|instructions?|directions?|steps?)$/i.test(x));
   let explicit=raw.match(/(?:^|\n)\s*(?:recipe|dish)\s*[:\-–—]\s*([^\n]{3,80})/i);
   let candidate=explicit?explicit[1]:(lines[0]||meta||raw);
+  let socialLead=String(caption||primary||"").match(/[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?[\s\S]*?\d{4}\s*:\s*[“"'‘’]?([^\n.]{3,90})/i);
+  if(socialLead&&socialLead[1])candidate=socialLead[1].trim();
   let saved=candidate.match(/^(?:save|try|make)\s+(?:this\s+)?(.{3,60}?)\s+recipe\b/i);
   if(saved)candidate=saved[1];
   candidate=candidate
@@ -303,7 +311,7 @@ async function fetchDetails(u){
 }
 function looksAutoTitle(r){
   let t=String(r.title||"").trim(),c=tidySocialText(r.caption||"");
-  return r.autoTitle===true||!t||/^saved from\b/i.test(t)||t.length>58||/#|@|\bon Instagram\b|\bTikTok\b.*[:|]/i.test(t)||(c&&t.length>35&&c.toLowerCase().startsWith(t.toLowerCase().slice(0,25)))
+  return r.autoTitle===true||!t||/^saved from\b/i.test(t)||/^[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?/i.test(t)||t.length>58||/#|@|\bon Instagram\b|\bTikTok\b.*[:|]/i.test(t)||(c&&t.length>35&&c.toLowerCase().startsWith(t.toLowerCase().slice(0,25)))
 }
 async function refreshDetails(r){
   if(!r||!r.url)return;
