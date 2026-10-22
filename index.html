@@ -182,7 +182,7 @@ function recipeTitle(primary,caption,src){
     .trim();
   let recipePhrase=candidate.match(/^(.{3,70}?\brecipe\b)/i);
   if(recipePhrase)candidate=recipePhrase[1].replace(/\brecipe\b/i,"").trim();
-  let sentence=candidate.split(/(?<=[.!?])\s+/)[0].trim();
+  let sm=candidate.match(/^.*?[.!?](?:\s|$)/);let sentence=(sm?sm[0]:candidate).trim();
   if(sentence.length>=3&&sentence.length<=72)candidate=sentence;
   if(candidate.length>72){
     let cut=candidate.slice(0,72);
