@@ -281,8 +281,23 @@ function externalRecipeUrl(text){
   let urls=String(text||"").match(/https?:\/\/[^\s)"']+/g)||[];
   return urls.find(x=>!/instagram\.com|tiktok\.com|facebook\.com|youtu(?:\.be|be\.com)|pinterest\./i.test(x))||""
 }
+function extractReaderCaption(text){
+  let t=String(text||"").replace(/\r/g,"").trim();
+  if(!t)return "";
+  let m=t.match(/(?:^|\n)\s*(?:Description|Caption)\s*[:\-]\s*([\s\S]{20,12000})/i);
+  if(m)t=m[1].trim();
+  let wrap=t.match(/([\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?\s*-\s*[^\n]{1,250}\bon\s+[A-Za-z]+\s+\d{1,2},\s+\d{4}\s*:\s*[“"'‘’]?[\s\S]{20,10000})/i);
+  if(wrap)t=wrap[1].trim();
+  return t.slice(0,12000)
+}
+function readerRecipeTitle(text,src){
+  let cap=extractReaderCaption(text);
+  if(!cap)return "";
+  let t=recipeTitle("",cap,src);
+  return /^[\d,.]+\s+likes?\b/i.test(t)?"":t
+}
 async function fetchDetails(u){
-  let src=source(u),out={title:"Saved from "+src,image:"",caption:"",ingredients:"",method:""},metaTitle="";
+  let src=source(u),out={title:"Saved from "+src,image:"",caption:"",ingredients:"",method:""},metaTitle="",reader="";
   if(src==="TikTok"){try{let r=await fetch("https://www.tiktok.com/oembed?url="+encodeURIComponent(u));if(r.ok){let j=await r.json();out.caption=j.title||"";metaTitle=j.title||"";out.image=j.thumbnail_url||""}}catch(e){}}
   try{
     let r=await fetch("https://api.microlink.io/?url="+encodeURIComponent(u)+"&meta.title=true&meta.description=true&meta.image=true");
@@ -293,19 +308,37 @@ async function fetchDetails(u){
       if(d.image&&d.image.url&&!out.image)out.image=d.image.url
     }
   }catch(e){}
+  let tentative=recipeTitle(metaTitle,out.caption,src);
+  let needsReader=!out.caption||!tentative||/^saved from\b/i.test(tentative)||/^[\d,.]+\s+likes?\b/i.test(tentative)||tentative.length<4;
+  if(src==="Instagram"||needsReader){
+    reader=await readerText(u);
+    let rc=extractReaderCaption(reader),rt=readerRecipeTitle(reader,src);
+    if(rc&&(!out.caption||/^[\d,.]+\s+likes?\b/i.test(out.caption)||out.caption.length<120))out.caption=rc;
+    if(rt)tentative=rt
+  }
   let p=parseCaption(out.caption);
-  if(!p.ingredients||!p.method){
-    let rt=await readerText(u),rp=parseCaption(rt);
+  if((!p.ingredients||!p.method)&&reader){
+    let rp=parseCaption(reader);
     if(!p.ingredients&&rp.ingredients)p.ingredients=rp.ingredients;
     if(!p.method&&rp.method)p.method=rp.method
   }
-  let web=externalRecipeUrl(out.caption);
+  if((!p.ingredients||!p.method)&&!reader){
+    reader=await readerText(u);
+    let rp=parseCaption(reader);
+    if(!p.ingredients&&rp.ingredients)p.ingredients=rp.ingredients;
+    if(!p.method&&rp.method)p.method=rp.method;
+    let rt=readerRecipeTitle(reader,src);
+    if(rt)tentative=rt
+  }
+  let web=externalRecipeUrl(out.caption+"\n"+reader);
   if(web&&(!p.ingredients||!p.method)){
     let wt=await readerText(web),wp=parseCaption(wt);
     if(!p.ingredients&&wp.ingredients)p.ingredients=wp.ingredients;
-    if(!p.method&&wp.method)p.method=wp.method
+    if(!p.method&&wp.method)p.method=wp.method;
+    let wtit=readerRecipeTitle(wt,"Website");
+    if((!tentative||/^saved from\b/i.test(tentative))&&wtit)tentative=wtit
   }
-  out.title=recipeTitle(metaTitle,out.caption,src);
+  out.title=tentative||recipeTitle(metaTitle,out.caption,src);
   out.ingredients=p.ingredients;out.method=p.method;
   return out
 }
@@ -318,7 +351,7 @@ async function refreshDetails(r){
   toast("Refreshing recipe details…");
   let local=parseCaption(r.caption||""),m=await fetchDetails(r.url),x={};
   let nt=recipeTitle(m.title||r.title,r.caption||m.caption,source(r.url));
-  if(looksAutoTitle(r)&&nt)x.title=nt,x.autoTitle=true;
+  if(looksAutoTitle(r)||/^[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?/i.test(String(r.title||"")))x.title=nt,x.autoTitle=true;
   if(m.image)x.image=m.image;
   if(m.caption)x.caption=m.caption;
   if(!r.ingredients&&(local.ingredients||m.ingredients))x.ingredients=local.ingredients||m.ingredients;
