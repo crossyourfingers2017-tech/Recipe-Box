@@ -188,6 +188,20 @@ function titleCaseRecipe(t){
   if(t===t.toUpperCase()&&t.length>5)t=t.toLowerCase().replace(/\b\w/g,m=>m.toUpperCase());
   return t.charAt(0).toUpperCase()+t.slice(1)
 }
+function findInlineRecipeName(text){
+  let t=tidySocialText(text||"").replace(/\n+/g," ");
+  let re=/(?:^|[.!?]\s+)([^.!?]{3,100}?\brecipe\b)/gi,m,cands=[];
+  while((m=re.exec(t))!==null){
+    let z=String(m[1]||"").trim()
+      .replace(/^(?:here(?:'|’)s|here is|this is|try|make|save|my|our|the|a|an)\s+/i,"")
+      .replace(/\s+recipe\b.*$/i,"")
+      .trim();
+    let words=z.split(/\s+/).filter(Boolean);
+    if(words.length>9)z=words.slice(-9).join(" ");
+    if(z.length>=4&&!/^(?:cheap|easy|quick|simple|fast|free|more)$/i.test(z))cands.push(z)
+  }
+  return cands.length?cands[cands.length-1]:""
+}
 function recipeTitle(primary,caption,src){
   let raw=normalizeRecipeText(tidySocialText(caption||primary)), meta=tidySocialText(primary);
   if(!raw&&!meta)return "Saved from "+src;
@@ -195,9 +209,10 @@ function recipeTitle(primary,caption,src){
   const bad=/^(?:[\d,.]+\s+likes?\b|[\d,.]+\s+comments?\b|save|follow|comment|share|tag|watch|recipe in (?:bio|comments)|full recipe|ad\b|sponsored\b)/i;
   lines=lines.filter(x=>!bad.test(x)&&!/^(?:ingredients?|method|instructions?|directions?|steps?)$/i.test(x));
   let explicit=raw.match(/(?:^|\n)\s*(?:recipe|dish)\s*[:\-–—]\s*([^\n]{3,80})/i);
-  let candidate=explicit?explicit[1]:(lines[0]||meta||raw);
+  let inlineName=findInlineRecipeName(caption||primary);
+  let candidate=explicit?explicit[1]:(inlineName||lines[0]||meta||raw);
   let socialLead=String(caption||primary||"").match(/[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?[\s\S]*?\d{4}\s*:\s*[“"'‘’]?([^\n.]{3,90})/i);
-  if(socialLead&&socialLead[1])candidate=socialLead[1].trim();
+  if(socialLead&&socialLead[1]&&!inlineName&&!explicit)candidate=socialLead[1].trim();
   let saved=candidate.match(/^(?:save|try|make)\s+(?:this\s+)?(.{3,60}?)\s+recipe\b/i);
   if(saved)candidate=saved[1];
   candidate=candidate
@@ -212,7 +227,7 @@ function recipeTitle(primary,caption,src){
   let punct=candidate.search(/[.!?]/);if(punct>=3&&punct<58)candidate=candidate.slice(0,punct);
   if(candidate.length>58)candidate=candidate.slice(0,58).replace(/\s+\S*$/,"");
   candidate=titleCaseRecipe(candidate);
-  if(!candidate||candidate.length<3||/^(?:instagram|tiktok|watch|video|saved from)/i.test(candidate)){
+  if(!candidate||candidate.length<3||/^(?:instagram|tiktok|watch|video|saved from|something i needed|if you want recipes)/i.test(candidate)){
     candidate=titleCaseRecipe(meta.replace(/^.*?:\s*/,""));
   }
   if(candidate.length>58)candidate=candidate.slice(0,55).replace(/\s+\S*$/,"")+"…";
@@ -344,7 +359,7 @@ async function fetchDetails(u){
 }
 function looksAutoTitle(r){
   let t=String(r.title||"").trim(),c=tidySocialText(r.caption||"");
-  return r.autoTitle===true||!t||/^saved from\b/i.test(t)||/^[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?/i.test(t)||t.length>58||/#|@|\bon Instagram\b|\bTikTok\b.*[:|]/i.test(t)||(c&&t.length>35&&c.toLowerCase().startsWith(t.toLowerCase().slice(0,25)))
+  return r.autoTitle===true||!t||/^saved from\b/i.test(t)||(/^[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?/i.test(t)||/^something i needed|^if you want recipes/i.test(t))||t.length>58||/#|@|\bon Instagram\b|\bTikTok\b.*[:|]/i.test(t)||(c&&t.length>35&&c.toLowerCase().startsWith(t.toLowerCase().slice(0,25)))
 }
 async function refreshDetails(r){
   if(!r||!r.url)return;
