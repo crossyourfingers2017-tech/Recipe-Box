@@ -148,9 +148,102 @@ async function saveRecipe(){if(!connected)return toast("Connect Firebase first")
 async function patch(rid,obj){obj.updatedAt=serverTimestamp();obj.updatedBy=name||"Household";await updateDoc(doc(db,"libraries",library,"recipes",rid),obj)}
 async function remove(){let rid=q("#rid").value;if(rid&&confirm("Delete this recipe from both phones?")){await deleteDoc(doc(db,"libraries",library,"recipes",rid));closeEdit();q("#viewModal").classList.add("hidden");toast("Recipe deleted")}}
 function view(rid){let r=recipes.find(x=>x.id===rid);if(!r)return;currentView=rid;q("#viewModal").classList.remove("hidden");q("#viewBody").innerHTML=(r.image?'<img class="view-thumb" src="'+esc(r.image)+'" alt="" referrerpolicy="no-referrer">':'')+'<h2>'+esc(r.title||"Saved recipe")+'</h2><div class="badges"><span class="badge">'+esc(r.category||"Inbox")+'</span><span class="badge">'+esc(r.source||"Other")+'</span></div>'+(r.url?'<p class="top-actions"><button id="openSource" class="primary">Open original post</button><button id="refreshDetails" class="secondary">Refresh details</button></p>':'')+'<div class="card"><h3>Ingredients</h3><div class="viewsec">'+(r.ingredients?esc(r.ingredients):'<span class="muted">No ingredients added yet — tap Edit to add them.</span>')+'</div></div>'+'<div class="card"><h3>Method</h3><div class="viewsec">'+(r.method?esc(r.method):'<span class="muted">No method added yet — tap Edit to add it.</span>')+'</div></div>'+(r.caption?'<div class="card"><h3>Original caption</h3><div class="viewsec">'+esc(r.caption)+'</div></div>':'')+(r.notes?'<div class="card"><h3>Notes</h3><div class="viewsec">'+esc(r.notes)+'</div></div>':'')+(r.tags?'<p class="muted">Tags: '+esc(r.tags)+'</p>':'');let im=q("#viewBody img");if(im)im.onerror=()=>im.remove();let b=q("#openSource");if(b)b.onclick=()=>window.open(r.url,"_blank");let rf=q("#refreshDetails");if(rf)rf.onclick=()=>refreshDetails(r)}
-function recipeTitle(text,src){let t=String(text||"").replace(/https?:\/\/\S+/g,"").replace(/#[^\s#]+/g," ").replace(/\s+/g," ").trim();if(!t)return "Saved from "+src;return t.length>90?t.slice(0,87)+"…":t}
-function parseCaption(text){let t=String(text||"").replace(/\r/g,"").trim(),ingredients="",method="";if(!t)return{ingredients,method};let im=t.match(/\bingredients?\b\s*[:\-]?\s*([\s\S]*?)(?=\b(?:method|instructions?|directions?|steps?)\b\s*[:\-]?|$)/i);let mm=t.match(/\b(?:method|instructions?|directions?|steps?)\b\s*[:\-]?\s*([\s\S]*)/i);if(im)ingredients=im[1].trim();if(mm)method=mm[1].trim();return{ingredients,method}}
-async function fetchDetails(u){let src=source(u),out={title:"Saved from "+src,image:"",caption:"",ingredients:"",method:""};if(src==="TikTok"){try{let r=await fetch("https://www.tiktok.com/oembed?url="+encodeURIComponent(u));if(r.ok){let j=await r.json();out.caption=j.title||"";out.title=recipeTitle(j.title,src);out.image=j.thumbnail_url||""}}catch(e){}}if(src!=="TikTok"||!out.image){try{let r=await fetch("https://api.microlink.io/?url="+encodeURIComponent(u)+"&meta.title=true&meta.description=true&meta.image=true");if(r.ok){let j=await r.json(),d=j.data||{};if(d.title)out.title=recipeTitle(d.title,src);if(d.description&&!out.caption)out.caption=d.description;if(d.image&&d.image.url&&!out.image)out.image=d.image.url}}catch(e){}}let p=parseCaption(out.caption);out.ingredients=p.ingredients;out.method=p.method;return out}
+function tidySocialText(text){
+  return String(text||"")
+    .replace(/https?:\/\/\S+/gi," ")
+    .replace(/@[A-Za-z0-9._]+/g," ")
+    .replace(/#[^\s#]+/g," ")
+    .replace(/^.*?\bon\s+Instagram\s*:\s*["“]?/i,"")
+    .replace(/^TikTok\s*[-|:·]\s*/i,"")
+    .replace(/[“”"]/g,"")
+    .replace(/[ \t]+/g," ")
+    .replace(/\n[ \t]+/g,"\n")
+    .trim()
+}
+function titleCaseRecipe(t){
+  t=String(t||"").trim().replace(/[|•]+$/,"").replace(/^[\s:;,.\-–—]+|[\s:;,.\-–—]+$/g,"");
+  if(!t)return "";
+  if(t===t.toUpperCase()&&t.length>5)t=t.toLowerCase().replace(/\b\w/g,m=>m.toUpperCase());
+  return t.charAt(0).toUpperCase()+t.slice(1)
+}
+function recipeTitle(primary,caption,src){
+  let raw=tidySocialText(caption||primary), meta=tidySocialText(primary);
+  if(!raw&&!meta)return "Saved from "+src;
+  let explicit=raw.match(/(?:^|\n)\s*(?:recipe|dish)\s*[:\-–—]\s*([^\n]{3,90})/i);
+  if(explicit)return titleCaseRecipe(explicit[1].split(/\b(?:ingredients?|what you(?:'|’)ll need|method|instructions?|directions?|steps?|how to make)\b/i)[0]);
+  let beforeHeading=raw.split(/\n\s*(?:ingredients?|what you(?:'|’)ll need|what you will need|you(?:'|’)ll need|shopping list|method|instructions?|directions?|steps?|how to make(?: it)?|how i make(?: it)?)\s*[:\-–—]?\s*\n?/i)[0].trim();
+  let lines=beforeHeading.split(/\n+/).map(x=>x.trim()).filter(Boolean).filter(x=>!/^\s*(?:save|follow|comment|share|tag)\b/i.test(x));
+  let candidate=lines[0]||meta||raw;
+  candidate=candidate
+    .replace(/^\s*(?:here(?:'|’)s|this is)\s+(?:my\s+)?/i,"")
+    .replace(/^\s*(?:how to make|make)\s+/i,"")
+    .replace(/^\s*(?:easy|quick)\s+recipe\s*[:\-–—]?\s*/i,"")
+    .replace(/\s*(?:full recipe|recipe below|details below|save this).*$/i,"")
+    .trim();
+  let recipePhrase=candidate.match(/^(.{3,70}?\brecipe\b)/i);
+  if(recipePhrase)candidate=recipePhrase[1].replace(/\brecipe\b/i,"").trim();
+  let sentence=candidate.split(/(?<=[.!?])\s+/)[0].trim();
+  if(sentence.length>=3&&sentence.length<=72)candidate=sentence;
+  if(candidate.length>72){
+    let cut=candidate.slice(0,72);
+    let p=Math.max(cut.lastIndexOf(" — "),cut.lastIndexOf(" - "),cut.lastIndexOf(": "),cut.lastIndexOf(". "));
+    if(p>24)cut=cut.slice(0,p);
+    else cut=cut.replace(/\s+\S*$/,"");
+    candidate=cut.trim()
+  }
+  candidate=titleCaseRecipe(candidate);
+  if(!candidate||candidate.length<3||/^(?:instagram|tiktok|watch|video|saved from)/i.test(candidate))candidate=titleCaseRecipe(meta);
+  if(candidate.length>72)candidate=candidate.slice(0,69).replace(/\s+\S*$/,"")+"…";
+  return candidate||"Saved from "+src
+}
+function cleanSection(s){
+  return String(s||"")
+    .replace(/^\s*[:\-–—]\s*/,"")
+    .replace(/\n\s*#[^\n]+$/g,"")
+    .trim()
+}
+function parseCaption(text){
+  let t=String(text||"").replace(/\r/g,"").trim(),ingredients="",method="";
+  if(!t)return{ingredients,method};
+  const ingHead="(?:ingredients?|what you(?:'|’)ll need|what you will need|you(?:'|’)ll need|shopping list)";
+  const methodHead="(?:method|instructions?|directions?|steps?|how to make(?: it)?|how i make(?: it)?)";
+  let im=t.match(new RegExp("(?:^|\\n)\\s*"+ingHead+"\\s*[:\\-–—]?\\s*\\n?([\\s\\S]*?)(?=(?:\\n\\s*"+methodHead+"\\s*[:\\-–—]?)|$)","i"));
+  let mm=t.match(new RegExp("(?:^|\\n)\\s*"+methodHead+"\\s*[:\\-–—]?\\s*\\n?([\\s\\S]*?)(?=(?:\\n\\s*(?:notes?|tips?|serves?|nutrition)\\s*[:\\-–—]?)|$)","i"));
+  if(im)ingredients=cleanSection(im[1]);
+  if(mm)method=cleanSection(mm[1]);
+  let lines=t.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+  if(!ingredients){
+    const unit=/\b(?:\d+(?:[.,/]\d+)?|½|¼|¾)\s*(?:g|kg|mg|ml|l|tsp|tbsp|teaspoons?|tablespoons?|cups?|oz|lb|cloves?|cans?|packs?|slices?)\b|\b(?:pinch|handful|drizzle)\b/i;
+    let run=[],best=[];
+    for(const line of lines){
+      if(unit.test(line)){run.push(line);if(run.length>best.length)best=[...run]}
+      else if(run.length){run=[]}
+    }
+    if(best.length>=3)ingredients=best.join("\n")
+  }
+  if(!method){
+    let numbered=lines.filter(x=>/^\s*(?:step\s*)?\d+[.)\-:]\s+/i.test(x));
+    if(numbered.length>=2)method=numbered.join("\n")
+  }
+  return{ingredients:cleanSection(ingredients),method:cleanSection(method)}
+}
+async function fetchDetails(u){
+  let src=source(u),out={title:"Saved from "+src,image:"",caption:"",ingredients:"",method:""},metaTitle="";
+  if(src==="TikTok"){try{let r=await fetch("https://www.tiktok.com/oembed?url="+encodeURIComponent(u));if(r.ok){let j=await r.json();out.caption=j.title||"";metaTitle=j.title||"";out.image=j.thumbnail_url||""}}catch(e){}}
+  try{
+    let r=await fetch("https://api.microlink.io/?url="+encodeURIComponent(u)+"&meta.title=true&meta.description=true&meta.image=true");
+    if(r.ok){
+      let j=await r.json(),d=j.data||{};
+      if(d.title)metaTitle=d.title;
+      if(d.description&&!out.caption)out.caption=d.description;
+      if(d.image&&d.image.url&&!out.image)out.image=d.image.url
+    }
+  }catch(e){}
+  out.title=recipeTitle(metaTitle,out.caption,src);
+  let p=parseCaption(out.caption);
+  out.ingredients=p.ingredients;out.method=p.method;
+  return out
+}
 async function refreshDetails(r){if(!r||!r.url)return;toast("Refreshing recipe details…");let m=await fetchDetails(r.url),x={};if(m.title&&m.title!=="Saved from "+source(r.url))x.title=m.title;if(m.image)x.image=m.image;if(m.caption)x.caption=m.caption;if(m.ingredients&&!r.ingredients)x.ingredients=m.ingredients;if(m.method&&!r.method)x.method=m.method;await patch(r.id,x);toast("Recipe details refreshed");setTimeout(()=>{let n=recipes.find(z=>z.id===r.id);if(n)view(r.id)},450)}
 async function quickSave(u){u=clean(u);if(!u)return;if(recipes.some(r=>clean(r.url)===u)){toast("Already in Recipe Box");return}toast("Getting recipe details…");let m=await fetchDetails(u);await addDoc(collection(db,"libraries",library,"recipes"),{title:m.title||"Saved from "+source(u),image:m.image||"",caption:m.caption||"",url:u,category:"Inbox",source:source(u),tags:"",ingredients:m.ingredients||"",method:m.method||"",notes:"",favourite:false,tried:false,addedBy:name||"Household",updatedBy:name||"Household",createdAt:serverTimestamp(),updatedAt:serverTimestamp()});toast(m.image||m.caption?"Saved with recipe details":"Saved link — details unavailable")}
 function exportJson(){let b=new Blob([JSON.stringify(recipes,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="recipe-box-backup-"+new Date().toISOString().slice(0,10)+".json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
